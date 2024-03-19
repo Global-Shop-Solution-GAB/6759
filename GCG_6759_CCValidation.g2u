@@ -1,0 +1,101 @@
+﻿Program.Sub.Preflight.Start
+V.Global.sError.Declare(String)
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Author: Arturo Almaguer
+'Date: 26th May 2022
+'Customer: Daystar Products, quote number 13490
+'This program verifies if all cc information has been entered when a SO terms = CREDITCARD.
+'This script is launched off 11869 Pre Save hook from SO Header Screen
+
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+
+F.Intrinsic.Control.Try
+
+	V.Local.sOrderNo.Declare(String)
+	V.Local.sTerms.Declare(String)
+	V.Local.sCustomer.Declare(String)
+	V.Local.sSQL.Declare(String)
+	V.Local.sCCData.Declare(String)
+	V.Local.iCounter.Declare(Long)
+	V.Local.sTest.Declare(String)
+	
+	'Setting variables
+	F.Intrinsic.String.LPad(V.Passed.000003,"0",7,V.Local.sOrderNo)
+	V.Local.sTerms.Set(V.Passed.000029)
+	V.Local.sCustomer.Set(V.Passed.000006)
+	
+	'F.Intrinsic.Control.If(V.Local.sTerms, =, "CREDITCARD", "AND", V.Caller.Switches, =, "N")
+	F.Intrinsic.Control.If(V.Local.sTerms, =, "CREDITCARD")
+	
+		'Getting cc information from PAYMENT table, which would mean the customer manually add a payment method for the order and save it.
+		F.ODBC.Connection!Con.OpenCompanyConnection
+		F.Intrinsic.String.Build("select * from V_PAYMENT where ORDER_NO = '{0}' and TRANS = 'ORDER' and PYMNT_TYPE = 'CC';", V.Local.sOrderNo, V.Local.sSQL)
+		F.Data.DataTable.CreateFromSQL("dtOrder", "Con", V.Local.sSQL, True)
+	
+		F.Intrinsic.Control.If(V.DataTable.dtOrder.RowCount, =, 0)
+		
+			'Getting cc information from AR Customer payment table, which means that the cc information was set up at the customer level.
+			'Not getting credit card number since it is encrypted. Assuming there is one if expiration date and cc name fields are different than blank.
+			F.Intrinsic.String.Build("select CC_TYPE, CC_REQUEST, EXPIRATION_DATE, CC_NAME from V_CUST_PAYMENT_INFO where CUSTOMER = '{0}';", V.Local.sCustomer, V.Local.sSQL)
+			F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSQL, V.Local.sCCData)
+					
+			F.Intrinsic.Control.If(V.Ambient.ExecuteAndReturnEOF, =, False)
+				
+				'Splitting all returned data and looping through each one of the fields just as a double check their values.
+				F.Intrinsic.String.Split(V.Local.sCCData,"*!*",V.Local.sCCData)
+				F.Intrinsic.Control.For(V.Local.iCounter, 0, V.Local.sCCData.UBound, 1)
+			
+					F.Intrinsic.Control.If(V.Local.sCCData(V.Local.iCounter), =, "")
+						'Stopping order save process since one of the equals to blank, which means the cc information is missing.
+						V.Passed.777777.Set(1)
+						F.Intrinsic.UI.Msgbox("Credit Card information is missing. Please fill in all data to save order.", "GCG 6759")
+						F.Intrinsic.Control.End
+					F.Intrinsic.Control.EndIf
+					
+				F.Intrinsic.Control.Next(V.Local.iCounter)
+				
+			F.Intrinsic.Control.Else
+				
+				'If the process gets here, it means that cc information wasnt set up neither on PAYMENT nor on CUT_PAYMENT_INFO tables.
+				'Stopping order save proces since cc information is missing.
+				V.Passed.777777.Set(1)
+				F.Intrinsic.UI.Msgbox("Credit Card information is missing. Please fill in all data to save order.", "GCG 6759")
+				
+			F.Intrinsic.Control.EndIf
+			
+		F.Intrinsic.Control.EndIf
+
+	F.ODBC.Connection!Con.Close
+	F.Intrinsic.Control.EndIf
+			
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.CatchError.Start
+'To display the error
+F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath, V.Ambient.Newline, V.Ambient.SubroutineCalledFrom, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Global.sError) 
+F.Intrinsic.UI.Msgbox(V.Global.sError)
+F.Intrinsic.Control.CallSub("Unload")
+Program.Sub.CatchError.End
+
+Program.Sub.Unload.Start
+'Closes the connection if it is open
+f.Intrinsic.Control.If(v.ODBC.conx.exists,=,"1") 	
+    f.ODBC.Connection!Con.Close
+f.Intrinsic.Control.EndIf
+
+'Ending program
+F.Intrinsic.Control.End
+Program.Sub.Unload.End
+
+Program.Sub.Comments.Start
+${$5$}$20.1.8649.24509$}$1
+${$6$}$gsandoval$}$20240105114409455$}$pxyipsmdqasyAY7lJ5+YqAibKN4I37/YXQ2byAA0xDGfF4fvKPSSNlGE340/U28v/UAt4QrB1RNPbgi8Y8pIMg==
+Program.Sub.Comments.End
